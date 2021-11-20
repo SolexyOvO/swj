@@ -45,8 +45,28 @@
             type="danger"
             v-show="serial.isConnectCOM"
             @click="closeCOM"
+            :disabled="chart.isshow"
             >关闭串口</el-button
           >
+          <div class="btn2">
+            <el-button
+              type="success"
+              v-show="serial.isConnectCOM && chart.isshow"
+              size="medium"
+              @click="stopDraw"
+              :disabled="chart.isRunning"
+              >停止绘制</el-button
+            >
+            <el-button
+              type="success"
+              v-show="serial.isConnectCOM && !chart.isshow"
+              size="medium"
+              @click="startDraw"
+            >
+              数据可视化
+            </el-button>
+          </div>
+
           <div v-show="false">
             <el-form-item label="数据位">
               <el-select v-model="serial.baudRate" placeholder="请选择波特率">
@@ -87,7 +107,8 @@
       <!-- 相关操作 -->
       <el-col :span="18">
         <div class="charts">
-          <div style="width: 100%; height: 100%" ref="chart"></div>
+          <!-- <Charts :newData="df"/> -->
+          <div style="width: 100%; height: 100%" id="echart"></div>
         </div>
       </el-col>
     </el-row>
@@ -96,13 +117,13 @@
 
 <script>
 /* eslint-disable no-unused-vars */
+/* eslint-disable no-undef */
+// import Charts from "../components/Charts";
+import * as echarts from "echarts";
 export default {
+  // components: { Charts },
   name: "Home",
-  computed:{
-    chartData(){
-      return [1,2,3,3,14,12,3,123,12,31,23,123,]
-    },
-  },
+  computed: {},
   data() {
     return {
       // a: null,
@@ -118,14 +139,107 @@ export default {
         serialPort: null,
         isConnectCOM: false, // 是否连接串口
       },
-      chart:{
-        
+      chart: {
+        isshow: false,
+        time: null, // 定时器的那个鬼东西
+        showdata: [], // 实际展示的数据
+        isRunning: false, // 画画的时候防止多点
+        chartDom: null, // chart容器
+        myChart: null, // 初始化后的chart
+        date: null,
+        // 绘制的配置
+        option: {
+          title: {
+            text: "实时温度",
+          },
+          tooltip: {
+            trigger: "axis",
+            formatter: function (params) {
+              params = params[0];
+              var date = new Date(params.name);
+              return (
+                date.getHours() +
+                "h/" +
+                (date.getMinutes() + 1) +
+                "m/" +
+                date.getSeconds() +
+                " s: " +
+                params.value[1] + "°"
+              );
+            },
+            axisPointer: {
+              animation: false,
+            },
+          },
+          xAxis: {
+            type: "time",
+            splitLine: {
+              show: false,
+            },
+          },
+          yAxis: {
+            type: "value",
+            boundaryGap: [0, "100%"],
+            splitLine: {
+              show: false,
+            },
+          },
+          series: [
+            {
+              name: "Fake Data",
+              type: "line",
+              showSymbol: false,
+              data: [
+                {
+                  name: new Date().toString(),
+                  value: [
+                    new Date().getTime(),
+                    5
+                  ],
+                },
+              ],
+            },
+          ],
+        },
       },
       sp: null,
     };
   },
   methods: {
+    startDraw() {
+      this.chart.isRunning = true; // 此时按钮不可按
+      const _this = this;
+      // 获取容器
+      this.chart.chartDom = document.getElementById("echart");
+      this.chart.myChart = echarts.init(this.chart.chartDom, "dark");
+      this.chart.myChart.setOption(this.chart.option);
+      this.chart.time = setInterval(() => {
+        _this.chart.myChart.setOption({
+          series: [
+            {
+              data: _this.chart.showdata,
+            },
+          ],
+        });
+      }, 1000);
+      this.chart.isRunning = false;
+      this.chart.date = new Date(); //
+
+      this.chart.isshow = true;
+    },
+    stopDraw() {
+      this.chart.isRunning = true; // 此时按钮不可按
+      clearInterval(this.chart.time);
+      this.chart.chartDom = null;
+      this.chart.myChart = null;
+      this.chart.showdata = [];
+      this.chart.date = null; // 销毁
+      echarts.dispose(document.getElementById("echart")); // 销毁
+      this.chart.isRunning = false; // 此时按钮不可按
+      this.chart.isshow = false;
+    },
     openCOM() {
+      //#region
       const _this = this;
       const com = _this.serial.COM;
       if (com == "") {
@@ -151,6 +265,8 @@ export default {
         });
         return;
       }
+      //#endregion
+
       // 打开串口
       {
         sp.open();
@@ -165,6 +281,29 @@ export default {
             _this.serial.isConnectCOM = false;
             // sp.close();
           }
+        });
+      }
+      // 绑定数据更新
+      {
+        let cdata = _this.chart.showdata;
+        sp.on("data", (data) => {
+          if (!_this.chart.isshow) {
+            return; // 如果不在显示状态
+          }
+          console.log(parseFloat(data.toString()));
+          this.chart.date = new Date(+this.chart.date + 1000);
+          if (cdata.length > 1000) {
+            cdata.shift();
+          }
+          let now = this.chart.date;
+          let tempdata = {
+            name: this.chart.date.toString(),
+            value: [
+              now.getTime(),
+              parseFloat(data.toString()),
+            ],
+          };
+          cdata.push(tempdata);
         });
       }
     },
@@ -187,6 +326,13 @@ export default {
       handler(newValue, oldValue) {},
       immediate: false,
       deep: true,
+    },
+    "chart.isshow": {
+      handler(n, o) {
+        console.log(111);
+      },
+      immediate: true,
+      // deep:true
     },
   },
   mounted() {
@@ -226,6 +372,7 @@ export default {
         (err) => console.error(err)
       );
     }, 1000);
+    require("./js/Home");
   },
 };
 </script>
@@ -234,5 +381,14 @@ export default {
 .baud-select {
   float: left;
   max-width: 120px;
+}
+
+#echart {
+  min-width: 1280px;
+  min-height: 800px;
+}
+
+.btn2 {
+  margin-top: 10px;
 }
 </style>

@@ -63,7 +63,7 @@ export default {
   left: 0;
   top: 60px;
   width: 100%;
-  min-height: 800px;
+  min-height: 1800px;
 }
 .el-header {
   background-color: #b3c0d1;
