@@ -266,7 +266,22 @@ export default {
         return;
       }
       //#endregion
-
+      
+      // 处理错误
+      sp.on("error",err => {
+        // 判断是不是正常的粗偶 ，要是不是就执行下面的
+        // 处理vue的一些属性
+        {
+          sp.close()
+          if(_this.chart.isshow){// 如果是在画
+            this.stopDraw()
+          }
+          this.closeCOM()
+          _this.serial.serialPort = null;
+          _this.serial.serial = null;
+          _this.serial.com = null;
+        }
+      })
       // 打开串口
       {
         sp.open();
@@ -290,7 +305,7 @@ export default {
           if (!_this.chart.isshow) {
             return; // 如果不在显示状态
           }
-          console.log(parseFloat(data.toString()));
+          // console.log(parseFloat(data.toString()));
           this.chart.date = new Date(+this.chart.date + 1000);
           if (cdata.length > 1000) {
             cdata.shift();
@@ -309,7 +324,7 @@ export default {
     },
     closeCOM() {
       const _this = this;
-      const sp = this.serial.serialPort; // 能关闭必然是已经连接上了
+      const sp = this.serial.serialPort; // 能关闭必然是已经连接上了,
       sp.close((err) => {
         if (err == null) {
           _this.serial.isConnectCOM = false;
